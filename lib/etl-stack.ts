@@ -61,6 +61,7 @@ export class EtlStack extends cdk.Stack {
       environment: {
         DATABASE_ENDPOINT: props.database.dbInstanceEndpointAddress,
         DATABASE_NAME: 'movieexplorer',
+        DATABASE_SECRET_ARN: props.database.secret?.secretArn || '',
         GCP_SECRET_NAME: this.gcpAccessTokenSecret.secretName,
         TARGET_FOLDER_ID: '1Z-Bqt69UgrGkwo0ArjHaNrA7uUmUm2r6',
         AWS_REGION: this.region,
@@ -69,6 +70,11 @@ export class EtlStack extends cdk.Stack {
 
     // Grant database access to task
     props.database.grantConnect(taskDefinition.taskRole);
+    
+    // Grant access to the database secret
+    if (props.database.secret) {
+      props.database.secret.grantRead(taskDefinition.taskRole);
+    }
 
     // Grant access to the GCP token secret
     this.gcpAccessTokenSecret.grantRead(taskDefinition.taskRole);

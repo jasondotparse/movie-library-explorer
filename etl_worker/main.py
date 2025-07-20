@@ -31,40 +31,29 @@ def main():
         aws_region = os.environ.get('AWS_REGION', 'us-west-1')
         secret_name = os.environ.get('GCP_SECRET_NAME', 'GCP_access_token')
         target_folder_id = os.environ.get('TARGET_FOLDER_ID', '1Z-Bqt69UgrGkwo0ArjHaNrA7uUmUm2r6')
+        database_secret_arn = os.environ.get('DATABASE_SECRET_ARN')
         
-        logger.info(f"Configuration: AWS Region={aws_region}, Secret={secret_name}, Folder={target_folder_id}")
+        if not database_secret_arn:
+            raise Exception("DATABASE_SECRET_ARN environment variable not set")
+        
+        logger.info(f"Configuration: AWS Region={aws_region}, GCP Secret={secret_name}, Folder={target_folder_id}")
+        logger.info(f"Database Secret ARN: {database_secret_arn}")
         
         # Initialize Google Drive client
         logger.info("Initializing Google Drive client...")
         drive_client = DriveClient(aws_region, secret_name)
         
-        # Test connection by listing folder contents
-        logger.info(f"Accessing Google Drive folder: {target_folder_id}")
-        folder_contents = drive_client.explore_folder(target_folder_id)
+        # Initialize database client
+        logger.info("Initializing database client...")
+        db_client = DBClient(database_secret_arn, aws_region)
         
-        # Log the results
-        logger.info("Successfully accessed Google Drive folder")
-        logger.info(f"Found {folder_contents['total_folders']} folders and {folder_contents['total_files']} files")
+        # Initialize ETL processor
+        logger.info("Initializing ETL processor...")
+        etl_processor = ETLProcessor(drive_client, db_client)
         
-        # Log folder structure for verification
-        logger.info("\n=== Folder Structure ===")
-        for folder in folder_contents['folders']:
-            logger.info(f"Folder: {folder['name']} ({folder['id']})")
-        
-        for file in folder_contents['files']:
-            logger.info(f"File: {file['name']} ({file['size_str']})")
-        
-        logger.info(f"\nSummary: {folder_contents['total_folders']} folders, {folder_contents['total_files']} files")
-        
-        # TODO: In future iterations:
-        # 1. Initialize database client
-        # db_client = DBClient(connection_params)
-        
-        # 2. Initialize ETL processor
-        # etl_processor = ETLProcessor(drive_client, db_client)
-        
-        # 3. Run the full ETL process
-        # etl_processor.run()
+        # Run the full ETL process
+        logger.info("Starting ETL process...")
+        etl_processor.run()
         
         logger.info("ETL Worker completed successfully")
         
