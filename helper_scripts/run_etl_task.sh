@@ -17,12 +17,23 @@ echo "Cluster: $CLUSTER"
 echo "Task Definition: $TASK_DEFINITION"
 echo "Subnets: $SUBNET_IDS"
 
+# Get the ETL security group
+SECURITY_GROUP=$(aws cloudformation list-exports --region $REGION --query "Exports[?Name=='MovieExplorerEtlTaskSecurityGroupId'].Value" --output text)
+
+if [ -z "$SECURITY_GROUP" ]; then
+  echo "Warning: Could not find ETL security group, using default"
+  SECURITY_GROUP_PARAM=""
+else
+  echo "Security Group: $SECURITY_GROUP"
+  SECURITY_GROUP_PARAM=",securityGroups=[$SECURITY_GROUP]"
+fi
+
 # Run the task
 TASK_ARN=$(aws ecs run-task \
   --cluster $CLUSTER \
   --task-definition $TASK_DEFINITION \
   --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],assignPublicIp=ENABLED}" \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],assignPublicIp=ENABLED$SECURITY_GROUP_PARAM}" \
   --region $REGION \
   --query 'tasks[0].taskArn' \
   --output text)

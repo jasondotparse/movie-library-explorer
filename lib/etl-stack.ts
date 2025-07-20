@@ -5,6 +5,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import { Construct } from 'constructs';
 
 export interface EtlStackProps extends cdk.StackProps {
@@ -31,15 +32,28 @@ export class EtlStack extends cdk.Stack {
       clusterName: 'movie-explorer-etl',
     });
 
+    // Create security group for ECS tasks with proper egress rules
+    const taskSecurityGroup = new ec2.SecurityGroup(this, 'EtlTaskSecurityGroup', {
+      vpc: props.vpc,
+      description: 'Security group for ETL tasks',
+      allowAllOutbound: true, // This ensures all outbound traffic is allowed
+    });
+
     // Create task definition
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'EtlTaskDefinition', {
       memoryLimitMiB: 2048,
       cpu: 1024,
     });
 
+    taskDefinition.executionRole?.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonECSTaskExecutionRolePolicy')
+    );
+
     // Add container with our ETL worker
     const container = taskDefinition.addContainer('EtlContainer', {
-      image: ecs.ContainerImage.fromAsset('./etl_worker'),
+      image: ecs.ContainerImage.fromAsset('./etl_worker', {
+        platform: Platform.LINUX_AMD64, // Ensure we build for x86_64 platform
+      }),
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'movie-etl',
         logRetention: logs.RetentionDays.ONE_WEEK,
@@ -59,16 +73,6 @@ export class EtlStack extends cdk.Stack {
     // Grant access to the GCP token secret
     this.gcpAccessTokenSecret.grantRead(taskDefinition.taskRole);
 
-    // Create Fargate service (commented out for now as we don't have the actual ETL code)
-    // const service = new ecs.FargateService(this, 'EtlService', {
-    //   cluster,
-    //   taskDefinition,
-    //   desiredCount: 0, // Start with 0, manually trigger when needed
-    //   vpcSubnets: {
-    //     subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-    //   },
-    // });
-
     // Outputs
     new cdk.CfnOutput(this, 'ClusterArn', {
       value: cluster.clusterArn,
@@ -86,6 +90,19 @@ export class EtlStack extends cdk.Stack {
       value: this.gcpAccessTokenSecret.secretArn,
       description: 'GCP Access Token Secret ARN',
       exportName: 'MovieExplorerGCPTokenSecretArn',
+    });
+
+    new cdk.CfnOutput(this, 'TaskSecurityGroupId', {
+      value: taskSecurityGroup.securityGroupId,
+      description: 'Security Group ID for ETL tasks',
+      exportName: 'MovieExplorerEtlTaskSecurityGroupId',
+    });
+
+    // Note: When running tasks, use public subnets with assignPublicIp=ENABLED
+    // since there's no NAT Gateway configured in the VPC
+    new cdk.CfnOutput(this, 'NetworkingNote', {
+      value: 'Run tasks in public subnets with assignPublicIp=ENABLED',
+      description: 'Important networking configuration for running tasks',
     });
   }
 }
