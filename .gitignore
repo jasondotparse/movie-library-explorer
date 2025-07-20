@@ -169,6 +169,7 @@ memory-bank/
 node_modules
 cdk.out
 .cdk.staging
+dist/
 
 # AWS
 .aws-sam/
@@ -197,3 +198,5 @@ yarn-error.log*
 # Dependencies
 package-lock.json
 yarn.lock
+helper_scripts/credentials.json
+helper_scripts/token.json
