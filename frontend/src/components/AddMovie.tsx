@@ -115,7 +115,7 @@ const AddMovie: React.FC = () => {
       </form>
 
       {error && <div className="error">{error}</div>}
-      {success && <div className="success">Movie added successfully!</div>}
+      {success && <div className="success">Request received! The database may take a few minutes to update depending on current traffic.</div>}
     </div>
   );
 };

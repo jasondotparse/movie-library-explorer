@@ -200,3 +200,4 @@ package-lock.json
 yarn.lock
 helper_scripts/credentials.json
 helper_scripts/token.json
+example_2p_client/token.txt
