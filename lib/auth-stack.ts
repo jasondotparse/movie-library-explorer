@@ -36,6 +36,14 @@ export class AuthStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY, // For development only
     });
 
+    // Create Cognito domain for hosted UI
+    const userPoolDomain = new cognito.UserPoolDomain(this, 'MovieExplorerDomain', {
+      userPool: this.userPool,
+      cognitoDomain: {
+        domainPrefix: `movie-explorer-${cdk.Stack.of(this).account}`, // Makes it unique per account
+      },
+    });
+
     // Create app client for web UI
     this.userPoolClient = new cognito.UserPoolClient(this, 'MovieExplorerWebClient', {
       userPool: this.userPool,
@@ -48,6 +56,8 @@ export class AuthStack extends cdk.Stack {
           authorizationCodeGrant: true,
         },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
+        callbackUrls: ['http://localhost:3000'], // Add production URL later
+        logoutUrls: ['http://localhost:3000'],    // Add production URL later
       },
     });
 
@@ -62,6 +72,11 @@ export class AuthStack extends cdk.Stack {
       value: this.userPoolClient.userPoolClientId,
       description: 'Cognito User Pool Client ID',
       exportName: 'MovieExplorerUserPoolClientId',
+    });
+
+    new cdk.CfnOutput(this, 'CognitoDomainUrl', {
+      value: `https://${userPoolDomain.domainName}.auth.${cdk.Stack.of(this).region}.amazoncognito.com`,
+      description: 'Cognito Hosted UI Domain URL',
     });
   }
 }

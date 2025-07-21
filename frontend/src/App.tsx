@@ -15,7 +15,7 @@ function App() {
   const signOutRedirect = () => {
     const clientId = "2bpg1k5fna74ijrqi7jgnddhsr";
     const logoutUri = "http://localhost:3000";
-    const cognitoDomain = "https://your-user-pool-domain.auth.us-west-1.amazoncognito.com"; // TODO: Update with actual domain
+    const cognitoDomain = "https://movie-explorer-756021455455.auth.us-west-1.amazoncognito.com";
     window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
   };
 
