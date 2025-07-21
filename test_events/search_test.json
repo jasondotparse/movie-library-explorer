@@ -1,0 +1,11 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/movies/search",
+  "queryStringParameters": {
+    "title": "inkbound"
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": null
+}

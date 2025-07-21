@@ -1,0 +1,20 @@
+{
+  "Records": [
+    {
+      "messageId": "test-message-id",
+      "receiptHandle": "test-receipt-handle",
+      "body": "{\"id\": \"550e8400-e29b-41d4-a716-446655440000\", \"title\": \"The Test Movie\", \"genre\": \"Comedy\", \"rating\": 7.5, \"year\": 2023, \"created_at\": \"2025-07-20T19:30:00Z\"}",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1737385800000",
+        "SenderId": "AIDACKCEVSQ6C2EXAMPLE",
+        "ApproximateFirstReceiveTimestamp": "1737385800001"
+      },
+      "messageAttributes": {},
+      "md5OfBody": "098f6bcd4621d373cade4e832627b4f6",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-west-1:756021455455:movie-explorer-creation-queue",
+      "awsRegion": "us-west-1"
+    }
+  ]
+}

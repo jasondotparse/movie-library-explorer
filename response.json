@@ -1,0 +1,1 @@
+{"statusCode": 200, "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}, "body": "{\"movies\": [{\"id\": \"550e8400-e29b-41d4-a716-446655440000\", \"title\": \"The Test Movie\", \"genre\": \"Comedy\", \"rating\": 7.5, \"year\": 2023, \"created_at\": \"2025-07-20T19:30:00\"}]}"}

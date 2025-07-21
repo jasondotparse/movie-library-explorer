@@ -1,0 +1,13 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/movies/filter",
+  "queryStringParameters": {
+    "genre": "Action",
+    "minRating": "7",
+    "year": "2020"
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": null
+}

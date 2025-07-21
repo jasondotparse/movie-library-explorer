@@ -1,0 +1,9 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/dashboard",
+  "queryStringParameters": null,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": null
+}
