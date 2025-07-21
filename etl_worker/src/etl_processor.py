@@ -26,6 +26,8 @@ class ETLProcessor:
         self.drive_client = drive_client
         self.db_client = db_client
         self.movies_processed = 0
+        self.movies_inserted = 0
+        self.movies_skipped = 0
     
     def process_json_file(self, file_id: str, file_name: str) -> bool:
         """
@@ -50,13 +52,16 @@ class ETLProcessor:
             # Insert into database
             movie_id = self.db_client.insert_movie(movie_data)
             
+            self.movies_processed += 1
+            
             if movie_id:
-                self.movies_processed += 1
+                self.movies_inserted += 1
                 logger.info(f"Successfully inserted movie: {movie_data.get('title', 'Unknown')}")
-                return True
             else:
-                logger.error(f"Failed to insert movie: {movie_data.get('title', 'Unknown')}")
-                return False
+                self.movies_skipped += 1
+                logger.info(f"Skipped duplicate movie: {movie_data.get('title', 'Unknown')}")
+            
+            return True
                 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from {file_name}: {str(e)}")
@@ -112,7 +117,10 @@ class ETLProcessor:
             logger.info(f"Starting to process Netflix Movie Collection folder: {root_folder_id}")
             self.process_folder(root_folder_id, "Netflix_Movie_Collection")
             
-            logger.info(f"ETL process completed. Total movies processed: {self.movies_processed}")
+            logger.info(f"ETL process completed.")
+            logger.info(f"  Total files processed: {self.movies_processed}")
+            logger.info(f"  New movies inserted: {self.movies_inserted}")
+            logger.info(f"  Duplicates skipped: {self.movies_skipped}")
             
         except Exception as e:
             logger.error(f"ETL process failed: {str(e)}")

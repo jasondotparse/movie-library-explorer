@@ -1,4 +1,159 @@
-## API Schema
+# Movie Library Explorer
+## Overview 
+Movie Library Explorer is a full stack web application and production-ready API ready for deployment on AWS. This repo contains the entirety of the service, including:
+* AWS infrastructure-as-code, defined as CDK stacks in /lib
+* Front end React.js UI source code, defined in /frontend
+* API layer / service logic, which are deployed as a set of serverless (AWS Lambda) functions defined in /lambda
+* ETL service, implemented as a AWS ECS task, easily launched via helper_scripts/run_etl_task.sh
+* GCP token creation & upload convenience script (required for the ETL service to interface with GCP APIs), implemented in helper_scripts/update_gcp_token.py
+
+## Architecture
+
+## Deployment and maintenance
+### Database Initialization
+The database schema is automatically created by an AWS Custom Resource Lambda function that runs during CDK deployment (of the MovieExplorerDatabase Stack). This ensures the table and indexes are always properly initialized when the infrastructure is deployed.
+
+### Manual actions required post cdk stack deployment
+
+**IMPORTANT**: If you need to completely redeploy from scratch (e.g., for duplicate prevention database schema changes), follow these steps in order:
+
+#### 1. Database Security Group Configuration
+After deploying the database stack, you must configure the security groups to allow connections from both Lambda functions and ECS tasks:
+
+```bash
+# Get the database security group ID
+DB_SG_ID=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=MovieExplorerDatabase-*" \
+  --region us-west-1 \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+# Get the Lambda security group ID  
+LAMBDA_SG_ID=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=MovieExplorerApi-ApiLambdaSecurityGroup*" \
+  --region us-west-1 \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+# Get the ECS task security group ID
+ECS_SG_ID=$(aws ec2 describe-security-groups \
+  --filters "Name=group-name,Values=MovieExplorerEtl-EtlTaskSecurityGroup*" \
+  --region us-west-1 \
+  --query 'SecurityGroups[0].GroupId' \
+  --output text)
+
+# Allow Lambda functions to connect to database
+aws ec2 authorize-security-group-ingress \
+  --group-id $DB_SG_ID \
+  --protocol tcp \
+  --port 5432 \
+  --source-group $LAMBDA_SG_ID \
+  --region us-west-1
+
+# Allow ECS tasks to connect to database  
+aws ec2 authorize-security-group-ingress \
+  --group-id $DB_SG_ID \
+  --protocol tcp \
+  --port 5432 \
+  --source-group $ECS_SG_ID \
+  --region us-west-1
+```
+
+#### 2. Authentication Configuration Updates
+When deploying new infrastructure, the CloudFront distribution URL changes. Update the authentication stack:
+
+```bash
+# Get the new CloudFront distribution URL from the frontend stack output
+CLOUDFRONT_URL=$(aws cloudformation describe-stacks \
+  --stack-name MovieExplorerFrontend \
+  --region us-west-1 \
+  --query 'Stacks[0].Outputs[?OutputKey==`DistributionUrl`].OutputValue' \
+  --output text)
+
+echo "New CloudFront URL: $CLOUDFRONT_URL"
+```
+
+Update `lib/auth-stack.ts` with the new CloudFront URL in the `callbackUrls` and `logoutUrls` arrays, then redeploy:
+
+```bash
+cdk deploy MovieExplorerAuth
+```
+
+#### 3. Frontend Configuration Updates
+When API Gateway is recreated, update both frontend configuration files:
+
+```bash
+# Get the new API endpoint from the API stack output
+API_ENDPOINT=$(aws cloudformation describe-stacks \
+  --stack-name MovieExplorerApi \
+  --region us-west-1 \
+  --query 'Stacks[0].Outputs[?OutputKey==`ApiEndpoint`].OutputValue' \
+  --output text)
+
+echo "New API Endpoint: $API_ENDPOINT"
+```
+
+Update these files with the new API endpoint:
+- `frontend/src/config/environment.ts` - Update `apiEndpoint` field
+- `frontend/src/config/aws-config.ts` - Update `API.endpoint` field
+
+#### 4. Frontend Rebuild and Redeploy
+After updating configuration files, rebuild and redeploy the frontend:
+
+```bash
+# Rebuild the frontend with updated configuration
+cd frontend && npm run build && cd ..
+
+# Redeploy the frontend stack to upload new build assets
+cdk deploy MovieExplorerFrontend
+```
+
+#### 5. CORS Configuration (CDK Managed)
+CORS is now properly configured in the CDK code (`lib/api-stack.ts`) with:
+```typescript
+defaultCorsPreflightOptions: {
+  allowOrigins: apigateway.Cors.ALL_ORIGINS,
+  allowMethods: apigateway.Cors.ALL_METHODS,
+  allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key', 'X-Amz-Security-Token'],
+}
+```
+
+No manual CORS configuration should be needed if deploying via CDK.
+
+#### 6. Optional: CloudFront Cache Invalidation
+If frontend changes aren't reflecting immediately, invalidate the CloudFront cache:
+
+```bash
+# Get the CloudFront distribution ID
+DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+  --stack-name MovieExplorerFrontend \
+  --region us-west-1 \
+  --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' \
+  --output text)
+
+# Invalidate all cached files
+aws cloudfront create-invalidation \
+  --distribution-id $DISTRIBUTION_ID \
+  --paths "/*" \
+  --region us-west-1
+```
+
+#### Current Production URLs (as of Session 10)
+- **Frontend**: https://d2hpvy9mz6bh86.cloudfront.net
+- **API**: https://b97dryed5d.execute-api.us-west-1.amazonaws.com/v1/
+- **CloudFront Distribution ID**: E37IS4CV2O6Y6J
+- **Cognito Domain**: https://movie-explorer-756021455455.auth.us-west-1.amazoncognito.com
+
+### triggering an ETL job
+* Currently, this can only be done locally because I have to sign into google (using my personal email that has been granted to the google drive folder) in order to get a token
+* helper_scripts/update_gcp_token.py puts a fresh GCP token in AWS Secrets manager, such that it can be used by the ETL task when it is run
+* helper_scripts/run_etl_task.sh automates the process kicking off a task on ECS. This task traverses the Google Drive folder and uploads movies to the database. 
+
+## Scalability 
+
+## Observability & Auditability 
+
+## API Documentation
 ### GET /api/movies/search?title=inception
 {
   "movies": [
@@ -80,7 +235,10 @@ CREATE TABLE movies (
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Duplicate prevention constraint
+    UNIQUE (title, genre, rating, year)
 );
 ```
 
@@ -93,6 +251,18 @@ The following indexes are automatically created for performance:
 - `idx_movies_genre`: B-tree index on `genre` for genre filtering
 - `idx_movies_year`: B-tree index on `year` for year-based queries
 - `idx_movies_rating`: B-tree index on `rating` for rating-based filtering
+- `movies_title_genre_rating_year_key`: Unique constraint index on `(title, genre, rating, year)` for duplicate prevention
+
+### Duplicate Prevention
+
+The database implements duplicate prevention through a unique constraint on the combination of `(title, genre, rating, year)`. This prevents the same movie with identical attributes from being inserted multiple times.
+
+**ETL Behavior**: The ETL worker uses `INSERT ... ON CONFLICT DO NOTHING` to gracefully handle duplicates:
+- First ETL run: Inserts new movies normally  
+- Subsequent ETL runs: Skips movies that already exist (based on the unique constraint)
+- No errors are thrown for duplicates - they are silently ignored
+
+**API Behavior**: When adding movies via the API, duplicate entries will be rejected and return an appropriate error response.
 
 ### Schema Details
 
@@ -103,10 +273,7 @@ The following indexes are automatically created for performance:
 - **year**: Release year (optional, 1900-2100 range)
 - **created_at**: Automatic timestamp when record is created
 - **updated_at**: Automatic timestamp when record is modified
-
-### Database Initialization
-
-The database schema is automatically created by an AWS Custom Resource Lambda function that runs during CDK deployment. This ensures the table and indexes are always properly initialized when the infrastructure is deployed.
+- **Unique constraint**: Combination of (title, genre, rating, year) must be unique across all records
 
 ## Tradoffs considered during system design
 * each of the 5 query types supported in the web UI 
@@ -115,16 +282,7 @@ The database schema is automatically created by an AWS Custom Resource Lambda fu
 * due to the fact that API Gateway pushes update requests to an SQS queue, our lambda cannot directly communicate with the front end in the event of an error to add a movie. For this, we'd need a DLQ. I think this is acceptable given the interface for movies is simple and write requests will fail rarely.
   * mitigation: if users complained about this, we could implement a websocket API gateway endpoint. It would pass the request to SQS and Lambda, including the websocket URL. Then, once the lambda has updated the db (or failed to do so) it could send its status to the websocket URL, which APIG would deliver to the front end. But, for the scope of v1 of this project, that sounds like over-engineering.
 
-### Additional todo items
+### Improvements
+* ETL worker could be made more efficient by doing batch updates, and it could be given the ability to start/stop in-progress jobs by traversing the folder breadth-first and putting its todo items in a SQS queue which it pulls/pushes to.
 * Cloudwatch dashboard, alarms, etc
 * Elasticache Redis in front of the postgres DB
-
-### Manual actions required post deployment
-* security group needs to be modified for the ECS task 
-* security group needs to be modified for the GET handler lambda 
-  * `aws ec2 authorize-security-group-ingress --group-id sg-abc123 --protocol tcp --port 5432 --source-group sg-xyz789`
-* enable CORS in API Gateway; redeploy the stage (v1)
-
-## triggering an ETL job
-* Currently, this can only be done locally because I have to sign into google (using my personal email that has been granted to the google drive folder) in order to get a token
-* helper_scripts/run_etl_task.sh automates the process of authenticating with GCP, uploading a new token to Secrets Manager, and kicking off a task on ECS. This task traverses the Google Drive folder and uploads movies to the database. 

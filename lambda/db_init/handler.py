@@ -162,6 +162,14 @@ CREATE TABLE IF NOT EXISTS movies (
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_movies_year ON movies(year);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_movies_rating ON movies(rating);")
         
+        # Create unique constraint to prevent duplicates
+        print("Creating unique constraint to prevent duplicates...")
+        cursor.execute("""
+            ALTER TABLE movies 
+            ADD CONSTRAINT unique_movie_combination 
+            UNIQUE (title, genre, rating, year);
+        """)
+        
         # Commit all changes
         connection.commit()
         print("Database initialization completed successfully!")

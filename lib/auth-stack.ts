@@ -58,11 +58,11 @@ export class AuthStack extends cdk.Stack {
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
         callbackUrls: [
           'http://localhost:3000',
-          'https://dhhizai8slpnn.cloudfront.net'
+          'https://d2hpvy9mz6bh86.cloudfront.net'
         ],
         logoutUrls: [
           'http://localhost:3000',
-          'https://dhhizai8slpnn.cloudfront.net'
+          'https://d2hpvy9mz6bh86.cloudfront.net'
         ],
       },
     });

@@ -78,21 +78,23 @@ class DBClient:
     
     def insert_movie(self, movie_data: Dict[str, Any]) -> Optional[str]:
         """
-        Insert a single movie into the database.
+        Insert a single movie into the database, skipping duplicates.
         
         Args:
             movie_data: Dictionary with movie information (title, genre, rating, year)
             
         Returns:
-            The UUID of the inserted movie, or None if failed
+            The UUID of the inserted movie, or None if duplicate was skipped
         """
         try:
             cursor = self.connection.cursor()
             
-            # Insert movie (allow duplicates as there's no unique constraint on title)
+            # Insert movie using ON CONFLICT to skip duplicates
             insert_query = """
                 INSERT INTO movies (title, genre, rating, year)
                 VALUES (%s, %s, %s, %s)
+                ON CONFLICT (title, genre, rating, year) 
+                DO NOTHING
                 RETURNING id::text;
             """
             
@@ -108,6 +110,9 @@ class DBClient:
             
             self.connection.commit()
             cursor.close()
+            
+            if not movie_id:
+                logger.info(f"Skipped duplicate movie: {movie_data.get('title')} ({movie_data.get('genre')}, {movie_data.get('year')}, rating {movie_data.get('rating')})")
             
             return movie_id
             

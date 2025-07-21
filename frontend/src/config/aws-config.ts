@@ -1,7 +1,7 @@
 const config = {
   region: 'us-west-1',
   API: {
-    endpoint: 'https://orrxyywtrk.execute-api.us-west-1.amazonaws.com/v1'
+    endpoint: 'https://b97dryed5d.execute-api.us-west-1.amazonaws.com/v1'
   },
   Auth: {
     userPoolId: 'us-west-1_610LASnzS',

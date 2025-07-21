@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 # API Configuration
-API_BASE_URL = "https://orrxyywtrk.execute-api.us-west-1.amazonaws.com/v1"
+API_BASE_URL = "https://b97dryed5d.execute-api.us-west-1.amazonaws.com/v1"
 TOKEN_FILE = "token.txt"
 
 def load_token():
