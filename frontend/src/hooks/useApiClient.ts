@@ -7,12 +7,12 @@ export const useApiClient = () => {
 
   const apiClient = useMemo(() => {
     return createApiClient(async () => {
-      if (auth.user?.access_token) {
-        return auth.user.access_token;
+      if (auth.user?.id_token) {
+        return auth.user.id_token;
       }
       return null;
     });
-  }, [auth.user?.access_token]);
+  }, [auth.user?.id_token]);
 
   return apiClient;
 };

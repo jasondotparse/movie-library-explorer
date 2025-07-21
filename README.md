@@ -112,9 +112,10 @@ The database schema is automatically created by an AWS Custom Resource Lambda fu
 * each of the 5 query types supported in the web UI 
 * If a job is, for some reason, terminated while the async worker has not yet finished its task, the PostgresDB will be half-updated. We consider this acceptable for the time being, and if we got feedback that this constraint is an issue, we could create a task progress queue to ensure that we know where to start up again if the task is brought back online and it sees the previous job was not completed (because there are items in the queue).
 * Since I don't have control of the Netflix_Movie_Collection Google Drive folder, and it has only been shared with holtkam2@gmail.com, I have no way to make a service email account so that my ECS task can be granted direct access to GCP and retrieve a token.json. Therefore, we'll have to settle for a script I can run locally on my mac which lets me sign in, then gets a fresh token and pushes it to AWS Secrets Manager for my ECS task to make requets to the Google Drive API.
+* due to the fact that API Gateway pushes update requests to an SQS queue, our lambda cannot directly communicate with the front end in the event of an error to add a movie. For this, we'd need a DLQ. I think this is acceptable given the interface for movies is simple and write requests will fail rarely.
+  * mitigation: if users complained about this, we could implement a websocket API gateway endpoint. It would pass the request to SQS and Lambda, including the websocket URL. Then, once the lambda has updated the db (or failed to do so) it could send its status to the websocket URL, which APIG would deliver to the front end. But, for the scope of v1 of this project, that sounds like over-engineering.
 
 ### Additional todo items
-* SQS to handle inbound POST requests insteaad of directly invoking the update lambda
 * Cloudwatch dashboard, alarms, etc
 * Elasticache Redis in front of the postgres DB
 
@@ -122,3 +123,8 @@ The database schema is automatically created by an AWS Custom Resource Lambda fu
 * security group needs to be modified for the ECS task 
 * security group needs to be modified for the GET handler lambda 
   * `aws ec2 authorize-security-group-ingress --group-id sg-abc123 --protocol tcp --port 5432 --source-group sg-xyz789`
+* enable CORS in API Gateway; redeploy the stage (v1)
+
+## triggering an ETL job
+* Currently, this can only be done locally because I have to sign into google (using my personal email that has been granted to the google drive folder) in order to get a token
+* helper_scripts/run_etl_task.sh automates the process of authenticating with GCP, uploading a new token to Secrets Manager, and kicking off a task on ECS. This task traverses the Google Drive folder and uploads movies to the database. 

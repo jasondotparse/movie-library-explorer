@@ -34,6 +34,38 @@ def get_db_connection():
         cursor_factory=RealDictCursor
     )
 
+"""
+There is an error in this function due to the timestamp handling. See this log in cloudwatch to illustrate:
+
+<logs>
+[INFO]	2025-07-21T15:13:31.632Z	74e3524d-748c-513c-8521-32b52fcefe3c	Processing message: 
+{
+    "id": "4f4dca0e-c6bd-4735-9ef8-24b1a10cfe0a",
+    "title": "Inkbound 2",
+    "genre": "Action",
+    "rating": 9,
+    "year": 2025,
+    "created_at": "21/Jul/2025:15:11:36  0000"
+}
+
+[ERROR]	2025-07-21T15:13:31.775Z	74e3524d-748c-513c-8521-32b52fcefe3c	Error inserting movie: invalid input syntax for type timestamp: "21/Jul/2025:15:11:36  0000"
+<logs>
+
+As you can see, when a request from the SQS queue is processed, the `created_at` field is in a format that PostgreSQL does not recognize as a valid timestamp.
+
+This is an example of a request sent as seen in the browser network tab POST /v1/api/movies {"title":"The Invincibles","genre":"Action","rating":9,"year":2005} ... note, no 'created_at'
+
+And here is what was put in the SQS queue... I took this right from the AWS console:
+
+{
+  "id": "2e70745a-e43f-43d8-8748-9f4aca75eac9",
+  "title": "The Invincibles",
+  "genre": "Action",
+  "rating": 9,
+  "year": 2005,
+  "created_at": "21/Jul/2025:15:30:48  0000"  // This is the problematic field
+}
+"""
 def insert_movie(movie_data):
     """Insert a movie into the database"""
     conn = None

@@ -4,11 +4,12 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { AuthProvider } from 'react-oidc-context';
+import { environment } from './config/environment';
 
 const cognitoAuthConfig = {
-  authority: "https://cognito-idp.us-west-1.amazonaws.com/us-west-1_610LASnzS",
-  client_id: "2bpg1k5fna74ijrqi7jgnddhsr",
-  redirect_uri: "http://localhost:3000",
+  authority: environment.authority,
+  client_id: environment.clientId,
+  redirect_uri: environment.redirectUri,
   response_type: "code",
   scope: "email openid profile",
 };

@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import MovieSearch from './components/MovieSearch';
 import TopRatedMovies from './components/TopRatedMovies';
 import AddMovie from './components/AddMovie';
+import { environment } from './config/environment';
 import './App.css';
 
 type View = 'dashboard' | 'search' | 'topRated' | 'add';
@@ -13,9 +14,9 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
 
   const signOutRedirect = () => {
-    const clientId = "2bpg1k5fna74ijrqi7jgnddhsr";
-    const logoutUri = "http://localhost:3000";
-    const cognitoDomain = "https://movie-explorer-756021455455.auth.us-west-1.amazoncognito.com";
+    const clientId = environment.clientId;
+    const logoutUri = environment.redirectUri;
+    const cognitoDomain = environment.cognitoDomain;
     window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${encodeURIComponent(logoutUri)}`;
   };
 

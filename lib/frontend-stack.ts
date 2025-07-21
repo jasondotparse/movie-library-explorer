@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as cloudfrontOrigins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
@@ -18,25 +19,29 @@ export class FrontendStack extends cdk.Stack {
 
     // Create S3 bucket for static website hosting
     const websiteBucket = new s3.Bucket(this, 'WebsiteBucket', {
-      websiteIndexDocument: 'index.html',
-      websiteErrorDocument: 'error.html',
       publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
-    // Create CloudFront distribution
+    // Create CloudFront distribution with Origin Access Control (OAC)
     const distribution = new cloudfront.Distribution(this, 'WebsiteDistribution', {
       defaultBehavior: {
-        origin: new cloudfrontOrigins.S3Origin(websiteBucket),
+        origin: cloudfrontOrigins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
       },
       defaultRootObject: 'index.html',
       errorResponses: [
         {
           httpStatus: 404,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html',
+          ttl: cdk.Duration.seconds(300),
+        },
+        {
+          httpStatus: 403,
           responseHttpStatus: 200,
           responsePagePath: '/index.html',
           ttl: cdk.Duration.seconds(300),
@@ -74,12 +79,12 @@ export class FrontendStack extends cdk.Stack {
       description: 'Configuration for React app',
     });
 
-    // todo: add a BucketDeployment 
-    // new s3deploy.BucketDeployment(this, 'DeployWebsite', {
-    //   sources: [s3deploy.Source.asset('../frontend/build')],
-    //   destinationBucket: websiteBucket,
-    //   distribution,
-    //   distributionPaths: ['/*'], // Invalidate CloudFront cache
-    // });
+    // Deploy website content to S3
+    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
+      sources: [s3deploy.Source.asset('./frontend/build')],
+      destinationBucket: websiteBucket,
+      distribution,
+      distributionPaths: ['/*'], // Invalidate CloudFront cache
+    });
   }
 }
