@@ -45,6 +45,31 @@ export class ApiStack extends cdk.Stack {
         dataTraceEnabled: false,
         loggingLevel: apigateway.MethodLoggingLevel.INFO,
         metricsEnabled: true,
+        cacheClusterEnabled: true,
+        cacheClusterSize: '0.5',
+        // Configure method-level caching for GET endpoints with 30s TTL for data freshness
+        methodOptions: {
+          '/api/dashboard/GET': {
+            cachingEnabled: true,
+            cacheTtl: cdk.Duration.seconds(30),
+            metricsEnabled: true,
+          },
+          '/api/movies/search/GET': {
+            cachingEnabled: true,
+            cacheTtl: cdk.Duration.seconds(30),
+            metricsEnabled: true,
+          },
+          '/api/movies/filter/GET': {
+            cachingEnabled: true,
+            cacheTtl: cdk.Duration.seconds(30),
+            metricsEnabled: true,
+          },
+          '/api/movies/top-rated/GET': {
+            cachingEnabled: true,
+            cacheTtl: cdk.Duration.seconds(30),
+            metricsEnabled: true,
+          },
+        },
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
