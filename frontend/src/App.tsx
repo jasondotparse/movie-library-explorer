@@ -36,11 +36,11 @@ function App() {
   };
 
   if (auth.isLoading) {
-    return <div>Loading...</div>;
+    return <div className="loading">Loading...</div>;
   }
 
   if (auth.error) {
-    return <div>Authentication error: {auth.error.message}</div>;
+    return <div className="error">Authentication error: {auth.error.message}</div>;
   }
 
   if (!auth.isAuthenticated) {
@@ -50,7 +50,7 @@ function App() {
           <h1>Movie Library Explorer</h1>
         </header>
         <main className="App-main">
-          <div style={{ textAlign: 'center', marginTop: '50px' }}>
+          <div className="sign-in-container">
             <h2>Please sign in to access the movie library</h2>
             <button onClick={() => auth.signinRedirect()}>Sign in</button>
           </div>
