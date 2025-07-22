@@ -47,7 +47,7 @@ export class ApiStack extends cdk.Stack {
         metricsEnabled: true,
         cacheClusterEnabled: true,
         cacheClusterSize: '0.5',
-        // Configure method-level caching for GET endpoints with 30s TTL for data freshness
+        // Configure method-level caching - only enable for dashboard (static data)
         methodOptions: {
           '/api/dashboard/GET': {
             cachingEnabled: true,
@@ -55,18 +55,15 @@ export class ApiStack extends cdk.Stack {
             metricsEnabled: true,
           },
           '/api/movies/search/GET': {
-            cachingEnabled: true,
-            cacheTtl: cdk.Duration.seconds(30),
+            cachingEnabled: false,
             metricsEnabled: true,
           },
           '/api/movies/filter/GET': {
-            cachingEnabled: true,
-            cacheTtl: cdk.Duration.seconds(30),
+            cachingEnabled: false,
             metricsEnabled: true,
           },
           '/api/movies/top-rated/GET': {
-            cachingEnabled: true,
-            cacheTtl: cdk.Duration.seconds(30),
+            cachingEnabled: false,
             metricsEnabled: true,
           },
         },
