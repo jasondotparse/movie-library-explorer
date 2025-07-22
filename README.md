@@ -13,6 +13,12 @@ This repo contains the entirety of the service, including:
 * ETL service, implemented as a AWS ECS task, easily launched via helper_scripts/run_etl_task.sh
 * GCP token creation & upload convenience script (required for the ETL service to interface with GCP APIs), implemented in helper_scripts/update_gcp_token.py
 
+## API Documentation
+
+For comprehensive API documentation including authentication, endpoints, parameters, and example responses, see:
+
+**[Complete API Documentation](documentation/api.md)**
+
 ## Architecture
 The app features the following:
 * Highly scalable serverless backend
@@ -71,16 +77,20 @@ This can be done at your convenience, or whenever the google docs folder has bee
 ## Tradoffs considered during system design
 * If a job is, for some reason, terminated while the async worker has not yet finished its task, the PostgresDB will be half-updated. We consider this acceptable for the time being, and if we got feedback that this constraint is an issue, we could create a task progress queue to ensure that we know where to start up again if the task is brought back online and it sees the previous job was not completed (because there are items in the queue).
 * Since I don't have control of the Netflix_Movie_Collection Google Drive folder, and it has only been shared with holtkam2@gmail.com, I have no way to make a service email account so that my ECS task can be granted direct access to GCP and retrieve a token.json. Therefore, we'll have to settle for a script I can run locally on my mac which lets me sign in, then gets a fresh token and pushes it to AWS Secrets Manager for my ECS task to make requets to the Google Drive API.
-* due to the fact that API Gateway pushes update requests to an SQS queue, our lambda cannot directly communicate with the front end in the event of an error to add a movie. For this, we'd need a DLQ. I think this is acceptable given the interface for movies is simple and write requests will fail rarely.
-* mitigation: if users complained about this, we could implement a websocket API gateway endpoint. It would pass the request to SQS and Lambda, including the websocket URL. Then, once the lambda has updated the db (or failed to do so) it could send its status to the websocket URL, which APIG would deliver to the front end. But, for the scope of v1 of this project, that sounds like over-engineering.
-* new moves are added using an SQS Queue, and are processed by a lambda on a FIFO basis. This is useful for handling massive traffic loads, but means that users updates are not made to the table instantly. I considered this an acceptable performance tradeoff, since in a scenario where thousands of users are adding movies at the same time, it's important to update them in the DB table in the order in which the requests are received.
+* due to the fact that API Gateway pushes update requests to an SQS queue, our lambda cannot directly communicate with the front end in the event of an error to add a movie. Every request that is sent to API Gateway is receives a 200 OK in responses, even if the subsequent lambda invocation fails to update the table. This is acceptable for V1 of the app. If this was a common painpoint, however, it would only take a couple hours to fix. We could implement a websocket API gateway endpoint - It would pass the request to SQS and Lambda, including the websocket URL. Then, once the lambda has updated the db (or failed to do so) it could send its status to the websocket URL, which APIG would deliver to the front end. But, for the scope of v1 of this project, that sounds like over-engineering.
+* new moves are added using an SQS Queue, and are processed by a lambda on a FIFO basis. This is useful for handling massive traffic loads, but means that users updates are not made to the table instantly. I considered this an acceptable performance tradeoff, since in a scenario where thousands of users are adding movies at the same time, it's important to update them in the DB table in the order in which the requests are received, and besides, we're caching requests to the /dashboard endpoint anyway, so the user would have to wait up to 30 for up-to-date data. This is acceptable for v1 of the app.
 * The table does not allow for a movie to have the exact same title/rating/year/genre. But if one of those is differnet from what already exists, that's acceptable. We need to handle edge cases where the same movie title appears many times, even if the rating is the same it may be a different movie if the year is different, and we should support that. 
 
 ### Improvements (todo, as time permits)
 * The ETL worker could be made more efficient by:
   1. writing to the DB in batch updates 
-  2. traversing the folder breadth-first and putting its subtasks (folders to process) in a SQS queue. Then it could recursively push/pull from the queue and process each folder until none are left in the queue. This would allow the job to be stopped/started at will... which could be useful if the folders were massive. It would also allow service operators to monitor progress of the job.
+  2. allowing for jobs to be started / stopped halfway with progress picking up where it left off. This could be done by: 1) traversing the folder breadth-first and putting its subtasks (folders to process) in a SQS queue 2) could recursively push/pull from the queue and process each folder until none are left in the queue. This would allow the job to be stopped/started at will... which could be useful if the folders were massive. It would also allow service operators to monitor progress of the job by observing the size of the SQS queue (this could even be made into an endpoint or websocket API that service owners could connect to in order to monitor ETL progress. All this is unnecessary for V1 of the app.)
 * A cloudwatch dashboard could be implemented to inform service owners of key usage data, including alarms and automations for operational effectiveness.
+* Automated build pipeline - currently, Cloudformation stack deploymenets must be kicked off by running the cli command from a machine that has AWS credentials configured... instead, the stacks should automatically update when a diff is made to the mainline branch of the repo's /lib directory. 
+* test stage: right now, there is only 1 environment the app is deployed in, meaning that any bugs which are pushed may not be discovered until downstream service owners have already experienced them. There should be a test instance of the service where experimental changes are made and tested before being promoted to 'production'. 
+* Automated docs: the API documentation should use Swagger (easy to export from API gateway's UI)
+* API Client: API Gateway has a feature that allows service owners to generate a client in just a few clicks. If there were really service owners relying upon this service, we should just 'vend the client' instead of just telling them to invoke API Gateway via HTTP. 
+* Web UI has a few minor bugs, such as the inability to remove a rating after one has been entered in the 'new movie' field. 
 
 ### Manual actions required post cdk stack deployment
 
@@ -212,70 +222,6 @@ aws cloudfront create-invalidation \
 - **API**: https://b97dryed5d.execute-api.us-west-1.amazonaws.com/v1/
 - **CloudFront Distribution ID**: E37IS4CV2O6Y6J
 - **Cognito Domain**: https://movie-explorer-756021455455.auth.us-west-1.amazoncognito.com
-
-## API Documentation
-### GET /api/movies/search?title=inception
-{
-  "movies": [
-    {
-      "id": "uuid-here",
-      "title": "Inception",
-      "genre": "Sci-Fi",
-      "rating": 8.8,
-      "year": 2010,
-      "created_at": "2025-01-20T10:00:00Z"
-    }
-  ]
-}
-
-### GET /api/dashboard
-{
-  "totalMovies": 32,
-  "averageRating": 7.5,
-  "topGenres": [
-    {"genre": "Action", "count": 8},
-    {"genre": "Drama", "count": 6},
-    {"genre": "Sci-Fi", "count": 5}
-  ],
-  "moviesByYear": [
-    {"year": 2020, "count": 5},
-    {"year": 2021, "count": 8}
-  ],
-}
-
-### GET /api/movies/top-rated?start=0&limit=10
-This returns the top 10 rated moves in the database. /api/movies/top-rated?start=10&limit=10 would return the next 10 highest rated.
-
-### POST /api/movies
-Content-Type: application/json
-
-{
-  "title": "Midnight Bloom",
-  "rating": 6.9,
-  "genre": "Romance",
-  "year": 2018
-}
-
-RESPONSE
-{
-  "id": "new-uuid",
-  "title": "Midnight Bloom",
-  "rating": 6.9,
-  "genre": "Romance", 
-  "year": 2018,
-  "created_at": "2025-01-20T18:30:00Z"
-}
-
-### GET /api/movies/filter?genre=action&genre=drama&minRating=7&year=2020
-{
-  "movies": [...],
-  "totalCount": 5,
-  "filters": {
-    "genres": ["action", "drama"],
-    "minRating": 7,
-    "year": 2020
-  }
-}
 
 
 ## Postgres table schema
