@@ -1,21 +1,90 @@
 # Movie Library Explorer
+Movie Library Explorer is a full stack web application and production-ready API ready for deployment on AWS. An instance has been deployed at at https://d2hpvy9mz6bh86.cloudfront.net/. Anyone can make an account and sign in.
+
+<div align="center">
+<img src="documentation/dash_screenshot.png" alt="Movie Library Explorer Dashboard" width="50%">
+</div>
+
 ## Overview 
-Movie Library Explorer is a full stack web application and production-ready API ready for deployment on AWS. This repo contains the entirety of the service, including:
-* AWS infrastructure-as-code, defined as CDK stacks in /lib
+This repo contains the entirety of the service, including:
+* AWS infrastructure-as-code, defined as CDK stacks in /lib, ready for deployment into a target AWS account
 * Front end React.js UI source code, defined in /frontend
 * API layer / service logic, which are deployed as a set of serverless (AWS Lambda) functions defined in /lambda
 * ETL service, implemented as a AWS ECS task, easily launched via helper_scripts/run_etl_task.sh
 * GCP token creation & upload convenience script (required for the ETL service to interface with GCP APIs), implemented in helper_scripts/update_gcp_token.py
 
 ## Architecture
+The app features the following:
+* Highly scalable serverless backend
+* Production ready PostgreSQL database hosted on AWS RDS
+* React.js web UI 
+* Fully automated ETL Worker hosted on AWS ECS
+* Caching at the API layer for extremely fast an efficient dashboard page loads
+* Ease of maintainance thanks to AWS CDK infrastructure as code & clouformation toolset
+* Highly obvservable thanks to automatic integration with AWS Cloudwatch at the API, service, and ETL component layer.
+
+![System Architecture](documentation/architecture.png)
 
 ## Deployment and maintenance
+### Deploying the stacks to a target AWS account
+
+AWS CDK (Cloud Development Kit) provides a powerful framework for defining cloud infrastructure using familiar programming languages. CDK automatically handles CloudFormation template generation, dependency management, and resource orchestration, making it easy to deploy production-ready services with consistent, repeatable configurations across environments. Within minutes, any developer could self-host an instance of this service in their account or region. Only a few manual commands are necessary - the service is 99.9% described as infrastructure as code. 
+
+#### Prerequisites
+```bash
+# Install Node.js 18+ and AWS CDK CLI
+npm install -g aws-cdk
+
+# Configure AWS credentials (ensure your account has appropriate permissions)
+aws configure
+
+# Verify CDK installation
+cdk --version
+```
+
+#### Deploy the Complete Application
+```bash
+# Clone the repository and install dependencies
+git clone https://github.com/jasondotparse/movie-library-explorer.git
+cd movie-library-explorer
+npm install
+
+# Build the React frontend
+cd frontend && npm install && npm run build && cd ..
+
+# Deploy all stacks (CDK handles dependencies automatically)
+cdk deploy --all
+```
+
+CDK will automatically deploy the stacks in the correct dependency order and output important URLs and resource identifiers. Note these values for the manual configuration steps described below.
+
 ### Database Initialization
 The database schema is automatically created by an AWS Custom Resource Lambda function that runs during CDK deployment (of the MovieExplorerDatabase Stack). This ensures the table and indexes are always properly initialized when the infrastructure is deployed.
 
+### Running an ETL job
+The folder which hosts the source files for the postgres DB are in a google drive folder, which you will need to have shared with you. Once you create your `credentials` file in GCP and upload it to movie-library-explorer/helper_scripts, you can run helper_scripts/run_etl_task.sh to automatically:
+1. upload your credentials to securely-stored AWS Secrets Manager to make it available to ECS
+2. kick off a async task worker 
+
+This can be done at your convenience, or whenever the google docs folder has been updated with more folders/files. 
+
+## Tradoffs considered during system design
+* If a job is, for some reason, terminated while the async worker has not yet finished its task, the PostgresDB will be half-updated. We consider this acceptable for the time being, and if we got feedback that this constraint is an issue, we could create a task progress queue to ensure that we know where to start up again if the task is brought back online and it sees the previous job was not completed (because there are items in the queue).
+* Since I don't have control of the Netflix_Movie_Collection Google Drive folder, and it has only been shared with holtkam2@gmail.com, I have no way to make a service email account so that my ECS task can be granted direct access to GCP and retrieve a token.json. Therefore, we'll have to settle for a script I can run locally on my mac which lets me sign in, then gets a fresh token and pushes it to AWS Secrets Manager for my ECS task to make requets to the Google Drive API.
+* due to the fact that API Gateway pushes update requests to an SQS queue, our lambda cannot directly communicate with the front end in the event of an error to add a movie. For this, we'd need a DLQ. I think this is acceptable given the interface for movies is simple and write requests will fail rarely.
+* mitigation: if users complained about this, we could implement a websocket API gateway endpoint. It would pass the request to SQS and Lambda, including the websocket URL. Then, once the lambda has updated the db (or failed to do so) it could send its status to the websocket URL, which APIG would deliver to the front end. But, for the scope of v1 of this project, that sounds like over-engineering.
+* new moves are added using an SQS Queue, and are processed by a lambda on a FIFO basis. This is useful for handling massive traffic loads, but means that users updates are not made to the table instantly. I considered this an acceptable performance tradeoff, since in a scenario where thousands of users are adding movies at the same time, it's important to update them in the DB table in the order in which the requests are received.
+* The table does not allow for a movie to have the exact same title/rating/year/genre. But if one of those is differnet from what already exists, that's acceptable. We need to handle edge cases where the same movie title appears many times, even if the rating is the same it may be a different movie if the year is different, and we should support that. 
+
+### Improvements (todo, as time permits)
+* The ETL worker could be made more efficient by:
+  1. writing to the DB in batch updates 
+  2. traversing the folder breadth-first and putting its subtasks (folders to process) in a SQS queue. Then it could recursively push/pull from the queue and process each folder until none are left in the queue. This would allow the job to be stopped/started at will... which could be useful if the folders were massive. It would also allow service operators to monitor progress of the job.
+* A cloudwatch dashboard could be implemented to inform service owners of key usage data, including alarms and automations for operational effectiveness.
+
 ### Manual actions required post cdk stack deployment
 
-**IMPORTANT**: If you need to completely redeploy from scratch (e.g., for duplicate prevention database schema changes), follow these steps in order:
+**IMPORTANT**: If you need to tear down and completely redeploy from scratch (e.g., for duplicate prevention database schema changes), follow these steps in order:
 
 #### 1. Database Security Group Configuration
 After deploying the database stack, you must configure the security groups to allow connections from both Lambda functions and ECS tasks:
@@ -144,15 +213,6 @@ aws cloudfront create-invalidation \
 - **CloudFront Distribution ID**: E37IS4CV2O6Y6J
 - **Cognito Domain**: https://movie-explorer-756021455455.auth.us-west-1.amazoncognito.com
 
-### triggering an ETL job
-* Currently, this can only be done locally because I have to sign into google (using my personal email that has been granted to the google drive folder) in order to get a token
-* helper_scripts/update_gcp_token.py puts a fresh GCP token in AWS Secrets manager, such that it can be used by the ETL task when it is run
-* helper_scripts/run_etl_task.sh automates the process kicking off a task on ECS. This task traverses the Google Drive folder and uploads movies to the database. 
-
-## Scalability 
-
-## Observability & Auditability 
-
 ## API Documentation
 ### GET /api/movies/search?title=inception
 {
@@ -274,15 +334,3 @@ The database implements duplicate prevention through a unique constraint on the 
 - **created_at**: Automatic timestamp when record is created
 - **updated_at**: Automatic timestamp when record is modified
 - **Unique constraint**: Combination of (title, genre, rating, year) must be unique across all records
-
-## Tradoffs considered during system design
-* each of the 5 query types supported in the web UI 
-* If a job is, for some reason, terminated while the async worker has not yet finished its task, the PostgresDB will be half-updated. We consider this acceptable for the time being, and if we got feedback that this constraint is an issue, we could create a task progress queue to ensure that we know where to start up again if the task is brought back online and it sees the previous job was not completed (because there are items in the queue).
-* Since I don't have control of the Netflix_Movie_Collection Google Drive folder, and it has only been shared with holtkam2@gmail.com, I have no way to make a service email account so that my ECS task can be granted direct access to GCP and retrieve a token.json. Therefore, we'll have to settle for a script I can run locally on my mac which lets me sign in, then gets a fresh token and pushes it to AWS Secrets Manager for my ECS task to make requets to the Google Drive API.
-* due to the fact that API Gateway pushes update requests to an SQS queue, our lambda cannot directly communicate with the front end in the event of an error to add a movie. For this, we'd need a DLQ. I think this is acceptable given the interface for movies is simple and write requests will fail rarely.
-  * mitigation: if users complained about this, we could implement a websocket API gateway endpoint. It would pass the request to SQS and Lambda, including the websocket URL. Then, once the lambda has updated the db (or failed to do so) it could send its status to the websocket URL, which APIG would deliver to the front end. But, for the scope of v1 of this project, that sounds like over-engineering.
-
-### Improvements
-* ETL worker could be made more efficient by doing batch updates, and it could be given the ability to start/stop in-progress jobs by traversing the folder breadth-first and putting its todo items in a SQS queue which it pulls/pushes to.
-* Cloudwatch dashboard, alarms, etc
-* Elasticache Redis in front of the postgres DB
